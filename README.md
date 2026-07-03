@@ -39,11 +39,37 @@ an exact key and then falls back to dotted object traversal.
 - `bool`
 - `date`, `datetime`
 - `bytes`
-- `object`
 - `array`
+
+`object` is intentionally not a standard formtool field type. Contracts are JSON
+objects, but individual data definitions should use scalar values, `bytes`, or
+`array`.
 
 `decimal` is returned as a validated string by `Any` and can be read as
 `*big.Rat` through `TypedValue.DecimalRat`.
+
+For `array`, Camellia formtool stores selected option codes in the form data.
+The contract field should include `arrayItemType` and an `options` snapshot:
+
+```json
+{
+  "jsonKey": "levels",
+  "dataType": "array",
+  "arrayItemType": "int32",
+  "options": [
+    { "code": "L1", "label": "一级", "value": "1" },
+    { "code": "L2", "label": "二级", "value": "2" }
+  ]
+}
+```
+
+Given data `{ "levels": ["L2", "L1"] }`, use:
+
+```go
+codes, _ := resolver.SelectionCodes("levels")   // []string{"L2", "L1"}
+names, _ := resolver.SelectionLabels("levels")  // []string{"二级", "一级"}
+values, _ := resolver.Int32Slice("levels")      // []int32{2, 1}
+```
 
 ## Contract Sources
 
@@ -63,7 +89,7 @@ the same JSON object.
 The current module path is:
 
 ```text
-github.com/camellia-go/cmldataresolve
+github.com/wangWenCn/cmldataresolve
 ```
 
 If this package is published under another GitHub organization, change the

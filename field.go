@@ -7,10 +7,19 @@ import (
 )
 
 type Field struct {
-	Code     string `json:"code,omitempty"`
-	Name     string `json:"name,omitempty"`
-	JSONKey  string `json:"jsonKey"`
-	DataType string `json:"dataType"`
+	Code          string   `json:"code,omitempty"`
+	Name          string   `json:"name,omitempty"`
+	JSONKey       string   `json:"jsonKey"`
+	DataType      string   `json:"dataType"`
+	ArrayItemType string   `json:"arrayItemType,omitempty"`
+	Options       []Option `json:"options,omitempty"`
+}
+
+type Option struct {
+	Code     string `json:"code"`
+	Label    string `json:"label"`
+	Value    string `json:"value"`
+	Disabled bool   `json:"disabled,omitempty"`
 }
 
 func normalizeDataType(value string) string {
@@ -57,8 +66,6 @@ func normalizeDataType(value string) string {
 		return "datetime"
 	case "bytes", "byte", "binary", "blob", "[]byte", "bytearray":
 		return "bytes"
-	case "object", "map", "jsonobject", "json":
-		return "object"
 	case "array", "slice", "list", "jsonarray":
 		return "array"
 	default:
@@ -71,6 +78,7 @@ func fieldFromMap(raw map[string]any) (Field, bool) {
 	code := firstString(raw, "fieldCode", "field_code", "code", "dataPointCode", "data_point_code")
 	name := firstString(raw, "displayName", "display_name", "name", "title", "label")
 	dataType := firstString(raw, "dataType", "data_type", "type", "valueType", "value_type")
+	arrayItemType := firstString(raw, "arrayItemType", "array_item_type", "itemType", "item_type")
 	if jsonKey == "" {
 		jsonKey = code
 	}
@@ -78,10 +86,12 @@ func fieldFromMap(raw map[string]any) (Field, bool) {
 		return Field{}, false
 	}
 	return Field{
-		Code:     code,
-		Name:     name,
-		JSONKey:  jsonKey,
-		DataType: normalizeDataType(dataType),
+		Code:          code,
+		Name:          name,
+		JSONKey:       jsonKey,
+		DataType:      normalizeDataType(dataType),
+		ArrayItemType: normalizeDataType(arrayItemType),
+		Options:       optionsFromAny(raw["options"]),
 	}, true
 }
 
@@ -144,7 +154,14 @@ func fieldsFromSchema(value any) []Field {
 			if dt := firstString(x, "dataType", "data_type"); dt != "" {
 				field.DataType = normalizeDataType(dt)
 			}
+			if itemType := firstString(x, "arrayItemType", "array_item_type"); itemType != "" {
+				field.ArrayItemType = normalizeDataType(itemType)
+			}
 		}
+		if itemType := firstString(prop, "x-camellia-arrayItemType", "x-camellia-arrayitemtype", "arrayItemType", "array_item_type"); itemType != "" {
+			field.ArrayItemType = normalizeDataType(itemType)
+		}
+		field.Options = optionsFromSchemaProperty(prop)
 		if field.Name == "" {
 			field.Name = firstString(prop, "title", "name", "description")
 		}
@@ -186,8 +203,6 @@ func schemaPropDataType(prop map[string]any) string {
 		return "bool"
 	case "array":
 		return "array"
-	case "object":
-		return "object"
 	case "string":
 		if format == "date" {
 			return "date"
@@ -210,6 +225,14 @@ func dedupeFields(fields []Field) []Field {
 		field.Code = strings.TrimSpace(field.Code)
 		field.Name = strings.TrimSpace(field.Name)
 		field.DataType = normalizeDataType(field.DataType)
+		if strings.EqualFold(field.DataType, "object") {
+			continue
+		}
+		field.ArrayItemType = normalizeDataType(field.ArrayItemType)
+		if field.DataType != "array" {
+			field.ArrayItemType = ""
+			field.Options = nil
+		}
 		if field.JSONKey == "" {
 			continue
 		}
@@ -221,4 +244,65 @@ func dedupeFields(fields []Field) []Field {
 		out = append(out, field)
 	}
 	return out
+}
+
+func optionsFromAny(value any) []Option {
+	items, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]Option, 0, len(items))
+	for index, item := range items {
+		if raw, ok := mapFromAny(item); ok {
+			code := firstString(raw, "code", "optionCode", "option_code", "key", "const")
+			if code == "" {
+				code = fmt.Sprint(index + 1)
+			}
+			label := firstString(raw, "label", "title", "name")
+			if label == "" {
+				label = code
+			}
+			value := firstString(raw, "value", "x-camellia-value", "x_camellia_value")
+			if value == "" {
+				value = code
+			}
+			out = append(out, Option{Code: code, Label: label, Value: value, Disabled: boolFromAny(raw["disabled"]) || boolFromAny(raw["x-camellia-disabled"]) || boolFromAny(raw["x_camellia_disabled"])})
+			continue
+		}
+		code := strings.TrimSpace(fmt.Sprint(item))
+		if code == "" {
+			code = fmt.Sprint(index + 1)
+		}
+		out = append(out, Option{Code: code, Label: code, Value: code})
+	}
+	return out
+}
+
+func optionsFromSchemaProperty(prop map[string]any) []Option {
+	if prop == nil {
+		return nil
+	}
+	if items, ok := mapFromAny(prop["items"]); ok {
+		if options := optionsFromAny(items["oneOf"]); len(options) > 0 {
+			return options
+		}
+		if options := optionsFromAny(items["enum"]); len(options) > 0 {
+			return options
+		}
+	}
+	if options := optionsFromAny(prop["oneOf"]); len(options) > 0 {
+		return options
+	}
+	return optionsFromAny(prop["enum"])
+}
+
+func boolFromAny(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "true") || strings.TrimSpace(v) == "1"
+	default:
+		return false
+	}
 }

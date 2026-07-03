@@ -90,6 +90,108 @@ func TestResolverFromInstanceContractData(t *testing.T) {
 	}
 }
 
+func TestResolverArrayOptionsUseCodeAndTypedValue(t *testing.T) {
+	contract := map[string]any{
+		"fields": []any{
+			map[string]any{
+				"fieldCode":     "levels",
+				"jsonKey":       "levels",
+				"name":          "Levels",
+				"dataType":      "array",
+				"arrayItemType": "int32",
+				"options": []any{
+					map[string]any{"code": "L1", "label": "一级", "value": "1"},
+					map[string]any{"code": "L2", "label": "二级", "value": "2"},
+				},
+			},
+		},
+	}
+	resolver, err := New(contract, map[string]any{"levels": []any{"L2", "L1"}})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	codes, err := resolver.SelectionCodes("levels")
+	if err != nil {
+		t.Fatalf("SelectionCodes() error = %v", err)
+	}
+	if got, want := codes, []string{"L2", "L1"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("SelectionCodes() = %#v, want %#v", got, want)
+	}
+	labels, err := resolver.SelectionLabels("levels")
+	if err != nil {
+		t.Fatalf("SelectionLabels() error = %v", err)
+	}
+	if got, want := labels, []string{"二级", "一级"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("SelectionLabels() = %#v, want %#v", got, want)
+	}
+	values, err := resolver.Int32Slice("levels")
+	if err != nil {
+		t.Fatalf("Int32Slice() error = %v", err)
+	}
+	if got, want := values, []int32{2, 1}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("Int32Slice() = %#v, want %#v", got, want)
+	}
+	anyValues, err := resolver.Any("levels")
+	if err != nil {
+		t.Fatalf("Any() error = %v", err)
+	}
+	list, ok := anyValues.([]any)
+	if !ok || len(list) != 2 || list[0] != int32(2) || list[1] != int32(1) {
+		t.Fatalf("Any(levels) = %#v, want []any{int32(2), int32(1)}", anyValues)
+	}
+}
+
+func TestResolverArrayOptionsFromSchemaExtensions(t *testing.T) {
+	contract := map[string]any{
+		"schema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"deptCodes": map[string]any{
+					"type":                     "array",
+					"title":                    "Departments",
+					"x-camellia-dataType":      "array",
+					"x-camellia-arrayItemType": "int32",
+					"items": map[string]any{
+						"type": "string",
+						"oneOf": []any{
+							map[string]any{"const": "dev", "title": "Development", "x-camellia-value": "3"},
+							map[string]any{"const": "qa", "title": "Quality", "x-camellia-value": "7"},
+						},
+					},
+				},
+			},
+		},
+	}
+	resolver, err := New(contract, map[string]any{"deptCodes": []any{"qa", "dev"}})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	labels, err := resolver.SelectionLabels("deptCodes")
+	if err != nil {
+		t.Fatalf("SelectionLabels() error = %v", err)
+	}
+	if got, want := labels, []string{"Quality", "Development"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("SelectionLabels() = %#v, want %#v", got, want)
+	}
+	values, err := resolver.Int32Slice("deptCodes")
+	if err != nil {
+		t.Fatalf("Int32Slice() error = %v", err)
+	}
+	if got, want := values, []int32{7, 3}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("Int32Slice() = %#v, want %#v", got, want)
+	}
+}
+
+func TestObjectFieldTypeIsNotStandard(t *testing.T) {
+	_, err := New(
+		map[string]any{"fields": []any{map[string]any{"jsonKey": "payload", "dataType": "object"}}},
+		map[string]any{"payload": map[string]any{"a": 1}},
+	)
+	if err == nil {
+		t.Fatal("New() error = nil, want invalid contract because object fields are not standard")
+	}
+}
+
 func TestMissingField(t *testing.T) {
 	resolver, err := New(map[string]any{"fields": []any{map[string]any{"jsonKey": "a", "dataType": "string"}}}, map[string]any{"a": "x"})
 	if err != nil {

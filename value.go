@@ -48,10 +48,8 @@ func (v TypedValue) Any() (any, error) {
 		return v.Time()
 	case "bytes":
 		return v.Bytes()
-	case "object":
-		return v.Object()
 	case "array":
-		return v.Array()
+		return v.ArrayValues()
 	default:
 		return v.raw, nil
 	}
@@ -247,13 +245,6 @@ func (v TypedValue) Bytes() ([]byte, error) {
 	}
 }
 
-func (v TypedValue) Object() (map[string]any, error) {
-	if m, ok := mapFromAny(v.raw); ok {
-		return m, nil
-	}
-	return nil, fmt.Errorf("%w: %s is not object", ErrConvertFailed, v.field.JSONKey)
-}
-
 func (v TypedValue) Array() ([]any, error) {
 	switch x := v.raw.(type) {
 	case []any:
@@ -275,6 +266,182 @@ func (v TypedValue) Array() ([]any, error) {
 		}
 		return out, nil
 	}
+}
+
+func (v TypedValue) SelectionCodes() ([]string, error) {
+	items, err := v.Array()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		code := strings.TrimSpace(rawString(item))
+		if code == "" {
+			continue
+		}
+		out = append(out, code)
+	}
+	return out, nil
+}
+
+func (v TypedValue) SelectionLabels() ([]string, error) {
+	codes, err := v.SelectionCodes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(codes))
+	for _, code := range codes {
+		option, ok := v.optionByCode(code)
+		if ok && option.Label != "" {
+			out = append(out, option.Label)
+			continue
+		}
+		out = append(out, code)
+	}
+	return out, nil
+}
+
+func (v TypedValue) optionValues() ([]string, error) {
+	codes, err := v.SelectionCodes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(codes))
+	for _, code := range codes {
+		option, ok := v.optionByCode(code)
+		if ok && option.Value != "" {
+			out = append(out, option.Value)
+			continue
+		}
+		out = append(out, code)
+	}
+	return out, nil
+}
+
+func (v TypedValue) ArrayValues() ([]any, error) {
+	values, err := v.optionValues()
+	if err != nil {
+		return nil, err
+	}
+	itemType := normalizeDataType(v.field.ArrayItemType)
+	if itemType == "" {
+		itemType = "string"
+	}
+	out := make([]any, 0, len(values))
+	for _, value := range values {
+		itemValue := TypedValue{field: Field{JSONKey: v.field.JSONKey, DataType: itemType}, raw: value}
+		converted, err := itemValue.Any()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, converted)
+	}
+	return out, nil
+}
+
+func (v TypedValue) StringSlice() ([]string, error) {
+	values, err := v.optionValues()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		converted, err := (TypedValue{field: Field{JSONKey: v.field.JSONKey, DataType: "string"}, raw: value}).String()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, converted)
+	}
+	return out, nil
+}
+
+func (v TypedValue) Int32Slice() ([]int32, error) {
+	values, err := v.optionValues()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]int32, 0, len(values))
+	for _, value := range values {
+		converted, err := (TypedValue{field: Field{JSONKey: v.field.JSONKey, DataType: "int32"}, raw: value}).Int32()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, converted)
+	}
+	return out, nil
+}
+
+func (v TypedValue) Int64Slice() ([]int64, error) {
+	values, err := v.optionValues()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]int64, 0, len(values))
+	for _, value := range values {
+		converted, err := (TypedValue{field: Field{JSONKey: v.field.JSONKey, DataType: "int64"}, raw: value}).Int64()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, converted)
+	}
+	return out, nil
+}
+
+func (v TypedValue) Uint64Slice() ([]uint64, error) {
+	values, err := v.optionValues()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]uint64, 0, len(values))
+	for _, value := range values {
+		converted, err := (TypedValue{field: Field{JSONKey: v.field.JSONKey, DataType: "uint64"}, raw: value}).Uint64()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, converted)
+	}
+	return out, nil
+}
+
+func (v TypedValue) Float64Slice() ([]float64, error) {
+	values, err := v.optionValues()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]float64, 0, len(values))
+	for _, value := range values {
+		converted, err := (TypedValue{field: Field{JSONKey: v.field.JSONKey, DataType: "float64"}, raw: value}).Float64()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, converted)
+	}
+	return out, nil
+}
+
+func (v TypedValue) BoolSlice() ([]bool, error) {
+	values, err := v.optionValues()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]bool, 0, len(values))
+	for _, value := range values {
+		converted, err := (TypedValue{field: Field{JSONKey: v.field.JSONKey, DataType: "bool"}, raw: value}).Bool()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, converted)
+	}
+	return out, nil
+}
+
+func (v TypedValue) optionByCode(code string) (Option, bool) {
+	for _, option := range v.field.Options {
+		if option.Code == code {
+			return option, true
+		}
+	}
+	return Option{}, false
 }
 
 func rawString(value any) string {

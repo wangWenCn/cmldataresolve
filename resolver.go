@@ -151,6 +151,86 @@ func (r *Resolver) Bool(key string) (bool, error) {
 	return value.Bool()
 }
 
+func (r *Resolver) Array(key string) ([]any, error) {
+	value, err := r.Value(key)
+	if err != nil {
+		return nil, err
+	}
+	return value.Array()
+}
+
+func (r *Resolver) ArrayValues(key string) ([]any, error) {
+	value, err := r.Value(key)
+	if err != nil {
+		return nil, err
+	}
+	return value.ArrayValues()
+}
+
+func (r *Resolver) SelectionCodes(key string) ([]string, error) {
+	value, err := r.Value(key)
+	if err != nil {
+		return nil, err
+	}
+	return value.SelectionCodes()
+}
+
+func (r *Resolver) SelectionLabels(key string) ([]string, error) {
+	value, err := r.Value(key)
+	if err != nil {
+		return nil, err
+	}
+	return value.SelectionLabels()
+}
+
+func (r *Resolver) StringSlice(key string) ([]string, error) {
+	value, err := r.Value(key)
+	if err != nil {
+		return nil, err
+	}
+	return value.StringSlice()
+}
+
+func (r *Resolver) Int32Slice(key string) ([]int32, error) {
+	value, err := r.Value(key)
+	if err != nil {
+		return nil, err
+	}
+	return value.Int32Slice()
+}
+
+func (r *Resolver) Int64Slice(key string) ([]int64, error) {
+	value, err := r.Value(key)
+	if err != nil {
+		return nil, err
+	}
+	return value.Int64Slice()
+}
+
+func (r *Resolver) Uint64Slice(key string) ([]uint64, error) {
+	value, err := r.Value(key)
+	if err != nil {
+		return nil, err
+	}
+	return value.Uint64Slice()
+}
+
+func (r *Resolver) Float64Slice(key string) ([]float64, error) {
+	value, err := r.Value(key)
+	if err != nil {
+		return nil, err
+	}
+	return value.Float64Slice()
+}
+
+func (r *Resolver) BoolSlice(key string) ([]bool, error) {
+	value, err := r.Value(key)
+	if err != nil {
+		return nil, err
+	}
+	return value.BoolSlice()
+}
+
 func (r *Resolver) JSON() ([]byte, error) {
 	return json.Marshal(r.data)
 }
