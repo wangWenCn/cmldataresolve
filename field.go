@@ -12,6 +12,7 @@ type Field struct {
 	JSONKey       string   `json:"jsonKey"`
 	DataType      string   `json:"dataType"`
 	ArrayItemType string   `json:"arrayItemType,omitempty"`
+	WidgetType    string   `json:"widgetType,omitempty"`
 	Options       []Option `json:"options,omitempty"`
 }
 
@@ -79,6 +80,7 @@ func fieldFromMap(raw map[string]any) (Field, bool) {
 	name := firstString(raw, "displayName", "display_name", "name", "title", "label")
 	dataType := firstString(raw, "dataType", "data_type", "type", "valueType", "value_type")
 	arrayItemType := firstString(raw, "arrayItemType", "array_item_type", "itemType", "item_type")
+	widgetType := firstString(raw, "widgetType", "widget_type", "controlType", "control_type")
 	if jsonKey == "" {
 		jsonKey = code
 	}
@@ -91,6 +93,7 @@ func fieldFromMap(raw map[string]any) (Field, bool) {
 		JSONKey:       jsonKey,
 		DataType:      normalizeDataType(dataType),
 		ArrayItemType: normalizeDataType(arrayItemType),
+		WidgetType:    strings.TrimSpace(widgetType),
 		Options:       optionsFromAny(raw["options"]),
 	}, true
 }
@@ -157,6 +160,9 @@ func fieldsFromSchema(value any) []Field {
 			if itemType := firstString(x, "arrayItemType", "array_item_type"); itemType != "" {
 				field.ArrayItemType = normalizeDataType(itemType)
 			}
+			if widgetType := firstString(x, "widgetType", "widget_type"); widgetType != "" {
+				field.WidgetType = strings.TrimSpace(widgetType)
+			}
 		}
 		if itemType := firstString(prop, "x-camellia-arrayItemType", "x-camellia-arrayitemtype", "arrayItemType", "array_item_type"); itemType != "" {
 			field.ArrayItemType = normalizeDataType(itemType)
@@ -167,6 +173,9 @@ func fieldsFromSchema(value any) []Field {
 		}
 		if field.Code == "" {
 			field.Code = firstString(prop, "fieldCode", "code")
+		}
+		if field.WidgetType == "" {
+			field.WidgetType = firstString(prop, "x-camellia-widgetType", "x-camellia-widgettype", "widgetType", "widget_type")
 		}
 		out = append(out, field)
 	}
@@ -231,6 +240,8 @@ func dedupeFields(fields []Field) []Field {
 		field.ArrayItemType = normalizeDataType(field.ArrayItemType)
 		if field.DataType != "array" {
 			field.ArrayItemType = ""
+		}
+		if !dataTypeAllowsOptions(field.DataType) {
 			field.Options = nil
 		}
 		if field.JSONKey == "" {
@@ -244,6 +255,15 @@ func dedupeFields(fields []Field) []Field {
 		out = append(out, field)
 	}
 	return out
+}
+
+func dataTypeAllowsOptions(dataType string) bool {
+	switch normalizeDataType(dataType) {
+	case "string", "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "float", "float32", "float64", "decimal", "array":
+		return true
+	default:
+		return false
+	}
 }
 
 func optionsFromAny(value any) []Option {

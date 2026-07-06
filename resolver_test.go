@@ -182,6 +182,102 @@ func TestResolverArrayOptionsFromSchemaExtensions(t *testing.T) {
 	}
 }
 
+func TestResolverScalarOptionUsesCodeAndTypedValue(t *testing.T) {
+	contract := map[string]any{
+		"fields": []any{
+			map[string]any{
+				"fieldCode":  "department",
+				"jsonKey":    "department",
+				"name":       "Department",
+				"dataType":   "string",
+				"widgetType": "select",
+				"options": []any{
+					map[string]any{"code": "D003", "label": "R&D", "value": "003"},
+					map[string]any{"code": "D004", "label": "Manufacturing", "value": "004"},
+				},
+			},
+			map[string]any{
+				"fieldCode":  "ageBand",
+				"jsonKey":    "ageBand",
+				"name":       "Age band",
+				"dataType":   "int32",
+				"widgetType": "radio",
+				"options": []any{
+					map[string]any{"code": "A", "label": "Adult", "value": "18"},
+				},
+			},
+			map[string]any{
+				"fieldCode":  "rawCode",
+				"jsonKey":    "rawCode",
+				"name":       "Raw code",
+				"dataType":   "string",
+				"widgetType": "input",
+				"options": []any{
+					map[string]any{"code": "X", "label": "Mapped", "value": "mapped-value"},
+				},
+			},
+		},
+	}
+	resolver, err := New(contract, map[string]any{"department": "D003", "ageBand": "A", "rawCode": "X"})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	dept, err := resolver.String("department")
+	if err != nil {
+		t.Fatalf("String(department) error = %v", err)
+	}
+	if dept != "003" {
+		t.Fatalf("String(department) = %q, want 003", dept)
+	}
+	labels, err := resolver.SelectionLabels("department")
+	if err != nil {
+		t.Fatalf("SelectionLabels(department) error = %v", err)
+	}
+	if len(labels) != 1 || labels[0] != "R&D" {
+		t.Fatalf("SelectionLabels(department) = %#v, want R&D", labels)
+	}
+	age, err := resolver.Int32("ageBand")
+	if err != nil {
+		t.Fatalf("Int32(ageBand) error = %v", err)
+	}
+	if age != 18 {
+		t.Fatalf("Int32(ageBand) = %d, want 18", age)
+	}
+	raw, err := resolver.String("rawCode")
+	if err != nil {
+		t.Fatalf("String(rawCode) error = %v", err)
+	}
+	if raw != "X" {
+		t.Fatalf("String(rawCode) = %q, want raw input X", raw)
+	}
+}
+
+func TestResolverFreeArrayAllowsRepeatedTypedValues(t *testing.T) {
+	contract := map[string]any{
+		"fields": []any{
+			map[string]any{
+				"fieldCode":     "samples",
+				"jsonKey":       "samples",
+				"name":          "Samples",
+				"dataType":      "array",
+				"arrayItemType": "int32",
+				"widgetType":    "textarea",
+			},
+		},
+	}
+	resolver, err := New(contract, map[string]any{"samples": []any{float64(1), float64(2), float64(2), float64(3)}})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	values, err := resolver.Int32Slice("samples")
+	if err != nil {
+		t.Fatalf("Int32Slice(samples) error = %v", err)
+	}
+	if got, want := values, []int32{1, 2, 2, 3}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] || got[3] != want[3] {
+		t.Fatalf("Int32Slice(samples) = %#v, want %#v", got, want)
+	}
+}
+
 func TestObjectFieldTypeIsNotStandard(t *testing.T) {
 	_, err := New(
 		map[string]any{"fields": []any{map[string]any{"jsonKey": "payload", "dataType": "object"}}},

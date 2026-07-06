@@ -48,17 +48,45 @@ objects, but individual data definitions should use scalar values, `bytes`, or
 `decimal` is returned as a validated string by `Any` and can be read as
 `*big.Rat` through `TypedValue.DecimalRat`.
 
-For `array`, Camellia formtool stores selected option codes in the form data.
-The contract field should include `arrayItemType` and an `options` snapshot:
+Static options are not tied to the `array` data type. Whether options are used
+depends on the field `widgetType`.
+
+For scalar `select` or `radio` fields, form data stores one selected
+`optionCode`, while typed reads resolve the matched option `value`:
+
+```json
+{
+  "jsonKey": "department",
+  "dataType": "string",
+  "widgetType": "select",
+  "options": [
+    { "code": "D003", "label": "R&D", "value": "003" },
+    { "code": "D004", "label": "Manufacturing", "value": "004" }
+  ]
+}
+```
+
+Given data `{ "department": "D003" }`, use:
+
+```go
+codes, _ := resolver.SelectionCodes("department")   // []string{"D003"}
+labels, _ := resolver.SelectionLabels("department") // []string{"R&D"}
+value, _ := resolver.String("department")           // "003"
+```
+
+For `array` option widgets such as `multiSelect` or `checkbox`, form data
+stores selected option-code arrays. The contract field should include
+`arrayItemType`, `widgetType`, and an `options` snapshot:
 
 ```json
 {
   "jsonKey": "levels",
   "dataType": "array",
   "arrayItemType": "int32",
+  "widgetType": "multiSelect",
   "options": [
-    { "code": "L1", "label": "一级", "value": "1" },
-    { "code": "L2", "label": "二级", "value": "2" }
+    { "code": "L1", "label": "Level 1", "value": "1" },
+    { "code": "L2", "label": "Level 2", "value": "2" }
   ]
 }
 ```
@@ -67,10 +95,14 @@ Given data `{ "levels": ["L2", "L1"] }`, use:
 
 ```go
 codes, _ := resolver.SelectionCodes("levels")   // []string{"L2", "L1"}
-names, _ := resolver.SelectionLabels("levels")  // []string{"二级", "一级"}
+labels, _ := resolver.SelectionLabels("levels") // []string{"Level 2", "Level 1"}
 values, _ := resolver.Int32Slice("levels")      // []int32{2, 1}
 ```
 
+For free array widgets such as `input` or `textarea`, form data stores the raw
+typed array and values may repeat. Given an `arrayItemType` of `int32` and data
+`{ "samples": [1, 2, 2, 3] }`, `resolver.Int32Slice("samples")` returns
+`[]int32{1, 2, 2, 3}`.
 ## Contract Sources
 
 The resolver reads fields from:
@@ -94,3 +126,4 @@ github.com/wangWenCn/cmldataresolve
 
 If this package is published under another GitHub organization, change the
 module path before creating the first public tag.
+

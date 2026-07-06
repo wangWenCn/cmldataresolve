@@ -56,7 +56,7 @@ func (v TypedValue) Any() (any, error) {
 }
 
 func (v TypedValue) String() (string, error) {
-	return rawString(v.raw), nil
+	return rawString(v.scalarConversionRaw()), nil
 }
 
 func (v TypedValue) Int() (int, error) {
@@ -82,7 +82,7 @@ func (v TypedValue) Int32() (int32, error) {
 }
 
 func (v TypedValue) Int64() (int64, error) {
-	switch x := v.raw.(type) {
+	switch x := v.scalarConversionRaw().(type) {
 	case json.Number:
 		return x.Int64()
 	case float64:
@@ -126,7 +126,7 @@ func (v TypedValue) Int64() (int64, error) {
 }
 
 func (v TypedValue) Uint64() (uint64, error) {
-	switch x := v.raw.(type) {
+	switch x := v.scalarConversionRaw().(type) {
 	case json.Number:
 		return strconv.ParseUint(x.String(), 10, 64)
 	case uint:
@@ -156,7 +156,7 @@ func (v TypedValue) Uint64() (uint64, error) {
 }
 
 func (v TypedValue) Float64() (float64, error) {
-	switch x := v.raw.(type) {
+	switch x := v.scalarConversionRaw().(type) {
 	case json.Number:
 		return x.Float64()
 	case float32:
@@ -177,7 +177,7 @@ func (v TypedValue) Float64() (float64, error) {
 }
 
 func (v TypedValue) DecimalString() (string, error) {
-	s := strings.TrimSpace(rawString(v.raw))
+	s := strings.TrimSpace(rawString(v.scalarConversionRaw()))
 	if s == "" {
 		return "", fmt.Errorf("%w: %s is empty decimal", ErrConvertFailed, v.field.JSONKey)
 	}
@@ -200,7 +200,7 @@ func (v TypedValue) DecimalRat() (*big.Rat, error) {
 }
 
 func (v TypedValue) Bool() (bool, error) {
-	switch x := v.raw.(type) {
+	switch x := v.scalarConversionRaw().(type) {
 	case bool:
 		return x, nil
 	case string:
@@ -218,7 +218,7 @@ func (v TypedValue) Bool() (bool, error) {
 }
 
 func (v TypedValue) Time() (time.Time, error) {
-	switch x := v.raw.(type) {
+	switch x := v.scalarConversionRaw().(type) {
 	case time.Time:
 		return x, nil
 	case string:
@@ -245,6 +245,37 @@ func (v TypedValue) Bytes() ([]byte, error) {
 	}
 }
 
+func (v TypedValue) scalarConversionRaw() any {
+	if !v.usesScalarOptions() {
+		return v.raw
+	}
+	code := strings.TrimSpace(rawString(v.raw))
+	if code == "" {
+		return v.raw
+	}
+	option, ok := v.optionByCode(code)
+	if ok && option.Value != "" {
+		return option.Value
+	}
+	return v.raw
+}
+
+func (v TypedValue) usesScalarOptions() bool {
+	if v.DataType() == "array" || len(v.field.Options) == 0 {
+		return false
+	}
+	widgetType := strings.ToLower(strings.TrimSpace(v.field.WidgetType))
+	return widgetType == "" || widgetType == "select" || widgetType == "radio"
+}
+
+func (v TypedValue) usesArrayOptions() bool {
+	if v.DataType() != "array" || len(v.field.Options) == 0 {
+		return false
+	}
+	widgetType := strings.ToLower(strings.TrimSpace(v.field.WidgetType))
+	return widgetType == "" || widgetType == "multiselect" || widgetType == "checkbox"
+}
+
 func (v TypedValue) Array() ([]any, error) {
 	switch x := v.raw.(type) {
 	case []any:
@@ -269,6 +300,13 @@ func (v TypedValue) Array() ([]any, error) {
 }
 
 func (v TypedValue) SelectionCodes() ([]string, error) {
+	if v.usesScalarOptions() {
+		code := strings.TrimSpace(rawString(v.raw))
+		if code == "" {
+			return nil, nil
+		}
+		return []string{code}, nil
+	}
 	items, err := v.Array()
 	if err != nil {
 		return nil, err
@@ -302,18 +340,29 @@ func (v TypedValue) SelectionLabels() ([]string, error) {
 }
 
 func (v TypedValue) optionValues() ([]string, error) {
-	codes, err := v.SelectionCodes()
+	if v.usesScalarOptions() || v.usesArrayOptions() {
+		codes, err := v.SelectionCodes()
+		if err != nil {
+			return nil, err
+		}
+		out := make([]string, 0, len(codes))
+		for _, code := range codes {
+			option, ok := v.optionByCode(code)
+			if ok && option.Value != "" {
+				out = append(out, option.Value)
+				continue
+			}
+			out = append(out, code)
+		}
+		return out, nil
+	}
+	items, err := v.Array()
 	if err != nil {
 		return nil, err
 	}
-	out := make([]string, 0, len(codes))
-	for _, code := range codes {
-		option, ok := v.optionByCode(code)
-		if ok && option.Value != "" {
-			out = append(out, option.Value)
-			continue
-		}
-		out = append(out, code)
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		out = append(out, strings.TrimSpace(rawString(item)))
 	}
 	return out, nil
 }
